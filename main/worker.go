@@ -35,10 +35,10 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func setParentOptions(taskid, taskname string) {
+func setParentOptions(taskid interface{}, taskname string) {
 	parentOptions := struct {
-		ID   string `json:"id"`
-		Code string `json:"code"`
+		ID   interface{} `json:"id"`
+		Code string      `json:"code"`
 	}{
 		ID:   taskid,
 		Code: taskname,
@@ -204,6 +204,8 @@ func run(queueName string) {
 			continue
 		}
 		log.Printf("message body %v\n", messageBody)
+
+		setParentOptions(d.Headers["task_id"], messageBody.Name)
 
 		// execute message code func
 		funcDo, ok := funcMap[messageBody.Name]
