@@ -51,8 +51,18 @@ func setParentOptions(taskid interface{}, taskname string) {
 }
 
 func getTaskInfo(headers amqp.Table, body MessageBoby) string {
-	deliveryInfo := headers["delivery_info"].(map[string]interface{})
-	parentOptions := headers["parent_options"].(map[string]interface{})
+	deliveryInfo := headers["delivery_info"].(amqp.Table)
+	// fmt.Printf("deliveryInfo exchange type %v\n", reflect.TypeOf(deliveryInfo["exchange"]))
+	// fmt.Printf("deliveryInfo value %T, %v\n", reflect.ValueOf(deliveryInfo), reflect.ValueOf(deliveryInfo))
+	var parentID, parentCode interface{}
+	parentOptions, ok := headers["parent_options"].(amqp.Table)
+	if ok {
+		parentID = parentOptions["id"]
+		parentCode = parentOptions["code"]
+	}
+	// fmt.Printf("parentOptions type %v\n", reflect.TypeOf(parentOptions["id"]))
+	// fmt.Printf("parentOptions value %v\n", reflect.ValueOf(parentOptions))
+	// return ""
 	taskInfo := struct {
 		ID          interface{}            `json:"id"`
 		Name        string                 `json:"name"`
@@ -73,9 +83,10 @@ func getTaskInfo(headers amqp.Table, body MessageBoby) string {
 		Origin:      headers["origin"],
 		CreatedTime: headers["created_time"],
 		Exchange:    deliveryInfo["exchange"],
+		RoutingKey:  deliveryInfo["routing_key"],
 		IsSent:      true,
-		ParentID:    parentOptions["id"],
-		ParentCode:  parentOptions["code"],
+		ParentID:    parentID,
+		ParentCode:  parentCode,
 	}
 	data, err := json.Marshal(taskInfo)
 	if err != nil {
