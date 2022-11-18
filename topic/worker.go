@@ -2,13 +2,24 @@ package main
 
 import (
 	"bytes"
-	"fmt"
+	"flag"
 	"log"
-	"os"
+	"strings"
 	"time"
 
 	"github.com/streadway/amqp"
 )
+
+var (
+	queues       string
+	routingKeys  string
+	exchangeName string = "logs_topic"
+)
+
+func init() {
+	flag.StringVar(&queues, "qs", "info_queue", "provide your queue, split by ','")
+	flag.StringVar(&routingKeys, "rk", "info", "provide your routing key, split by ','")
+}
 
 func failOnError(err error, msg string) {
 	if err != nil {
@@ -16,18 +27,13 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func severityFrom(args []string) string {
-	var s string
-	if (len(args) < 2) || os.Args[1] == "" {
-		s = "info"
-	} else {
-		s = os.Args[1]
-	}
-	return s
+func convertStr2List(str string) []string {
+	return strings.Split(str, ",")
 }
 
 func run() {
-	amqpURI := "amqp://admin:admin@localhost:5672/"
+	flag.Parse()
+	amqpURI := "amqp://admin:admin@localhost:5672/test"
 	connection, err := amqp.Dial(amqpURI)
 	failOnError(err, "dial amqp error")
 	defer connection.Close()
@@ -38,7 +44,7 @@ func run() {
 	defer channel.Close()
 
 	err = channel.ExchangeDeclare(
-		"logs_topic", // name
+		exchangeName, // name
 		"topic",      // type
 		true,         // durable
 		false,        // auto-deleted
@@ -48,29 +54,35 @@ func run() {
 	)
 	failOnError(err, "declare exchange error")
 
-	q, err := channel.QueueDeclare(
-		"logs_topic_queue", // name
-		false,              // durable
-		false,              // delete when unused
-		false,              // exclusive
-		false,              // no-wait
-		nil,                // arguments
-	)
-	failOnError(err, "Failed to declare a queue")
+	queueInf := convertStr2List(queues)
 
-	if len(os.Args) < 2 {
-		fmt.Printf("routing key should add to args\n")
-		os.Exit(0)
-	}
-	for _, key := range os.Args[1:] {
-		err = channel.QueueBind(
-			q.Name,       // name of the queue
-			key,          // bindingKey
-			"logs_topic", // sourceExchange
-			false,        // noWait
-			nil,          // arguments
+	// declare all queue
+	for _, queueName := range queueInf {
+		_, err := channel.QueueDeclare(
+			queueName, // name
+			true,      // durable
+			false,     // delete when unused
+			false,     // exclusive
+			false,     // no-wait
+			nil,       // arguments
 		)
-		failOnError(err, "Failed to bind key to queue")
+		failOnError(err, "Failed to declare a queue"+queueName)
+	}
+
+	routingKeyInf := convertStr2List(routingKeys)
+
+	// bind each routing key to all queue
+	for _, queueName := range queueInf {
+		for _, routingKey := range routingKeyInf {
+			err = channel.QueueBind(
+				queueName,    // name of the queue
+				routingKey,   // bindingKey
+				exchangeName, // sourceExchange
+				false,        // noWait
+				nil,          // arguments
+			)
+			failOnError(err, "Failed to bind key "+routingKey+" to queue "+queueName)
+		}
 	}
 
 	// fair dispatch for worker
@@ -81,50 +93,42 @@ func run() {
 	)
 	failOnError(err, "Failed to set QoS")
 
-	// err = channel.QueueBind(
-	// 	q.Name, // name of the queue
-	// 	"",     // bindingKey
-	// 	"logs", // sourceExchange
-	// 	false,  // noWait
-	// 	nil,    // arguments
-	// )
+	for _, queueName := range queueInf {
+		msgs, err := channel.Consume(
+			queueName, // queue
+			"",        // consumer
+			false,     // auto-ack
+			false,     // exclusive
+			false,     // no-local
+			false,     // no-wait
+			nil,       // args
+		)
+		failOnError(err, "Failed to register a consumer for queue: "+queueName)
+		go doWork(queueName, msgs)
+	}
+	exit := make(chan struct{})
+	<-exit
+}
 
-	msgs, err := channel.Consume(
-		q.Name, // queue
-		"",     // consumer
-		false,  // auto-ack
-		false,  // exclusive
-		false,  // no-local
-		false,  // no-wait
-		nil,    // args
-	)
-	failOnError(err, "Failed to register a consumer")
+func doWork(queueName string, msgs <-chan amqp.Delivery) {
+	log.Println(queueName + " begin to consume")
+	for msg := range msgs {
+		log.Printf("queue name: %s, msg: %s", queueName, msg.Body)
 
-	// forever := make(chan bool)
-
-	// go func() {
-	// 	for d := range msgs {
-	// 		log.Printf("Done %s", d.Body)
-	// 		dotCount := bytes.Count(d.Body, []byte("."))
-	// 		t := time.Duration(dotCount)
-	// 		time.Sleep(t * time.Second)
-	// 		d.Ack(false)
-	// 	}
-	// }()
-
-	// log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
-	// <-forever
-
-	for d := range msgs {
-		log.Printf("Done %s", d.Body)
-		dotCount := bytes.Count(d.Body, []byte("."))
-		t := time.Duration(dotCount)
-		time.Sleep(t * time.Second)
-		d.Ack(false)
+		if bytes.Contains(msg.Body, []byte("error")) {
+			msg.Ack(false)
+			continue
+		}
+		if bytes.Contains(msg.Body, []byte("wait")) {
+			dotCount := bytes.Count(msg.Body, []byte("."))
+			time.Sleep(time.Duration(dotCount) * time.Second)
+			msg.Ack(true)
+			continue
+		}
+		msg.Ack(true)
 	}
 }
 
 func main() {
 	run()
-	fmt.Printf("press CTRL+C to exit\n")
 }

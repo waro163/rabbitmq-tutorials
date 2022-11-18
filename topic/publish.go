@@ -2,11 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
-	"os"
-	"strings"
 
 	"github.com/streadway/amqp"
+)
+
+var (
+	exchangeName string = "logs_topic"
 )
 
 func failOnError(err error, msg string) {
@@ -15,28 +18,8 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func bodyFrom(args []string) string {
-	var s string
-	if (len(args) < 3) || os.Args[2] == "" {
-		s = "hello"
-	} else {
-		s = strings.Join(args[2:], " ")
-	}
-	return s
-}
-
-func severityFrom(args []string) string {
-	var s string
-	if (len(args) < 2) || os.Args[1] == "" {
-		s = "info"
-	} else {
-		s = os.Args[1]
-	}
-	return s
-}
-
 func main() {
-	amqpURI := "amqp://admin:admin@localhost:5672/"
+	amqpURI := "amqp://admin:admin@localhost:5672/test"
 	connection, err := amqp.Dial(amqpURI)
 	failOnError(err, "dial amqp error")
 	defer connection.Close()
@@ -47,7 +30,7 @@ func main() {
 	defer channel.Close()
 
 	err = channel.ExchangeDeclare(
-		"logs_topic", // name
+		exchangeName, // name
 		"topic",      // type
 		true,         // durable
 		false,        // auto-deleted
@@ -57,28 +40,40 @@ func main() {
 	)
 	failOnError(err, "declare exchange error")
 
-	// q, err := channel.QueueDeclare(
-	// 	"durable_hello", // name
-	// 	true,            // durable
-	// 	false,           // delete when unused
-	// 	false,           // exclusive
-	// 	false,           // no-wait
-	// 	nil,             // arguments
-	// )
-	// failOnError(err, "Failed to declare a queue")
-
-	body := bodyFrom(os.Args)
-	data, err := json.Marshal(body)
-	err = channel.Publish(
-		"logs_topic",          // exchange
-		severityFrom(os.Args), // routing key
-		false,                 // mandatory
-		false,                 // immediate
-		amqp.Publishing{
-			DeliveryMode: amqp.Persistent,
-			ContentType:  "application/json",
-			Body:         data,
-		})
-	failOnError(err, "Failed to publish a message")
-	log.Printf(" [x] Sent %s", body)
+	var routingKey, msg string
+	for {
+		fmt.Println("输入routing key:")
+		_, err = fmt.Scanf("%s", &routingKey)
+		if err != nil {
+			log.Println("input key error ", err)
+			continue
+		}
+		fmt.Println("输入发送的消息:")
+		_, err = fmt.Scanf("%s", &msg)
+		if err != nil {
+			log.Println("input body error ", err)
+			continue
+		}
+		body, err := json.Marshal(msg)
+		if err != nil {
+			log.Println("marshal msg error", err)
+			continue
+		}
+		err = channel.Publish(
+			exchangeName, // exchange
+			routingKey,   // routing key
+			false,        // mandatory
+			false,        // immediate
+			amqp.Publishing{
+				DeliveryMode: amqp.Persistent,
+				ContentType:  "application/json",
+				Body:         body,
+			},
+		)
+		if err != nil {
+			log.Println("Failed to publish a message", err)
+			continue
+		}
+		log.Println("send successfully")
+	}
 }
