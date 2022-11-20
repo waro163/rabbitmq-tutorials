@@ -29,10 +29,12 @@ func (r *Rabbit) connect() error {
 	if r.connection != nil && r.connection.IsClosed() == false {
 		return nil
 	}
+	log.Println("connect: begin dial")
 	connection, err := amqp.Dial(r.url)
 	if err != nil {
 		return err
 	}
+	log.Println("connect: dial succ")
 	r.errorConn = make(chan *amqp.Error)
 	r.connection = connection
 	connection.NotifyClose(r.errorConn)
@@ -45,6 +47,7 @@ func (r *Rabbit) getChannel() error {
 			return err
 		}
 	}
+	log.Println("get channel: begin get")
 	channel, err := r.connection.Channel()
 	if err != nil {
 		return err
@@ -57,6 +60,7 @@ func (r *Rabbit) getChannel() error {
 	); err != nil {
 		return err
 	}
+	log.Println("get channel: get succ")
 	r.errorChannel = make(chan *amqp.Error)
 	r.channel = channel
 	channel.NotifyClose(r.errorChannel)
@@ -96,9 +100,11 @@ func (r *Rabbit) consumeMsg(queueName string, fn func(amqp.Delivery) error) erro
 		select {
 		case <-r.errorConn:
 			r.connection = nil
+			log.Println("connection closed")
 			return errors.New("connection close")
 		case <-r.errorChannel:
 			r.channel = nil
+			log.Println("channel closed")
 			return errors.New("channel close")
 		case msg := <-msgs:
 			go fn(msg)
