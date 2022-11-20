@@ -127,6 +127,7 @@ func doWork(queueName string, msgs <-chan amqp.Delivery) {
 		}
 		msg.Ack(true)
 	}
+	log.Println(queueName + " had been exit")
 }
 
 func main() {
