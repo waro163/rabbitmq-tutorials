@@ -10,6 +10,10 @@ go mod vendor
 # run worker
 ```
 go run -mod=vendor topic/worker.go --qs=info_queue,warn_queue --rk=test
+
+or
+
+go run -mod=vendor main/*
 ```
 
 # run producer
