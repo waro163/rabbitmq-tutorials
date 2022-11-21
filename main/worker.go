@@ -26,7 +26,7 @@ func (r *Rabbit) connect() error {
 	if r.url == "" {
 		return errors.New("empty connection url")
 	}
-	if r.connection != nil && r.connection.IsClosed() == false {
+	if r.connection != nil && !r.connection.IsClosed() {
 		return nil
 	}
 	log.Println("connect: begin dial")

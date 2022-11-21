@@ -25,11 +25,13 @@ func doWork(msg amqp.Delivery) error {
 	log.Printf("get message: %s", msg.Body)
 	if bytes.Contains(msg.Body, []byte("error")) {
 		msg.Ack(false)
+		return nil
 	}
 	if bytes.Contains(msg.Body, []byte("wait")) {
 		dotCount := bytes.Count(msg.Body, []byte("."))
 		time.Sleep(time.Duration(dotCount) * time.Second)
 		msg.Ack(true)
+		return nil
 	}
 	msg.Ack(true)
 	return nil
