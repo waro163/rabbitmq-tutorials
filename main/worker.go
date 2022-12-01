@@ -32,6 +32,12 @@ func (r *Rabbit) connect() error {
 	}
 	log.Println("connect: begin dial")
 	connection, err := amqp.Dial(r.url)
+	// connection, err := amqp.DialConfig(r.url, amqp.Config{
+	// 	Vhost: r.vhost,
+	// 	Properties: amqp.Table{
+	// 		"connection_name": "turorials",
+	// 	},
+	// })
 	if err != nil {
 		return err
 	}
