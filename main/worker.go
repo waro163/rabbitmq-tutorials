@@ -175,6 +175,7 @@ func (r *Rabbit) Producer(exchangeName, routingKey string, msg interface{}) erro
 			false,        // mandatory
 			false,        // immediate
 			amqp.Publishing{
+				Headers:      amqp.Table{"app": "go-client"},
 				DeliveryMode: amqp.Persistent,
 				ContentType:  "application/json",
 				Body:         body,
